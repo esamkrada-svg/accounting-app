@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Accounting App</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
+        th { background: #f0f0f0; }
+        input, select, button { padding: 6px; margin: 4px; }
+    </style>
+</head>
+<body>
+
+<h2>Journal Entry</h2>
+
+<form method="post" action="/add">
+    Date:
+    <input type="date" name="date" required>
+
+    Currency:
+    <input type="text" name="currency" required>
+
+    Description:
+    <input type="text" name="description" required>
+
+    Account:
+    <input type="text" name="account" required>
+
+    Amount:
+    <input type="number" step="0.01" name="amount" required>
+
+    Type:
+    <select name="entry_type">
+        <option value="Debit">Debit</option>
+        <option value="Credit">Credit</option>
+    </select>
+
+    Person:
+    <input type="text" name="person">
+
+    Tag:
+    <input type="text" name="type_tag">
+
+    <button type="submit">Save</button>
+</form>
+
+<h2>Entries</h2>
+
+<table>
+    <tr>
+        <th>No</th>
+        <th>Date</th>
+        <th>Currency</th>
+        <th>Description</th>
+        <th>Account</th>
+        <th>Debit</th>
+        <th>Credit</th>
+        <th>Person</th>
+        <th>Tag</th>
+    </tr>
+
+    {% for e in entries %}
+    <tr>
+        <td>{{ e.entry_no }}</td>
+        <td>{{ e.date }}</td>
+        <td>{{ e.currency }}</td>
+        <td>{{ e.description }}</td>
+        <td>{{ e.account }}</td>
+        <td>{{ e.debit }}</td>
+        <td>{{ e.credit }}</td>
+        <td>{{ e.person_tag }}</td>
+        <td>{{ e.type_tag }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+</body>
+</html>
