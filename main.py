@@ -154,3 +154,50 @@ async def import_excel(file: UploadFile):
             })
 
     return RedirectResponse("/", status_code=303)
+from fastapi import UploadFile, File
+import pandas as pd
+
+@app.post("/import-excel")
+async def import_excel(file: UploadFile = File(...)):
+    # قراءة ملف Excel
+    df = pd.read_excel(file.file, sheet_name="JOURNAL_RAW")
+
+    # تأكد من ترتيب الأعمدة (اختياري للحماية)
+    df.columns = [
+        "EntryNo",
+        "Date",
+        "Currency",
+        "Description",
+        "Account",
+        "Debit",
+        "Credit",
+        "PersonTag",
+        "TypeTag"
+    ]
+
+    # تنظيف البيانات
+    df["Debit"] = df["Debit"].fillna(0)
+    df["Credit"] = df["Credit"].fillna(0)
+
+    with engine.begin() as conn:
+        for _, row in df.iterrows():
+            conn.execute(text("""
+                INSERT INTO journal_entries
+                (entry_no, date, currency, description,
+                 account, debit, credit, person_tag, type_tag)
+                VALUES
+                (:entry_no, :date, :currency, :description,
+                 :account, :debit, :credit, :person_tag, :type_tag)
+            """), {
+                "entry_no": row["EntryNo"],
+                "date": row["Date"],
+                "currency": row["Currency"],
+                "description": row["Description"],
+                "account": row["Account"],
+                "debit": row["Debit"],
+                "credit": row["Credit"],
+                "person_tag": row["PersonTag"],
+                "type_tag": row["TypeTag"]
+            })
+
+    return {"status": "success", "rows_imported": len(df)}
