@@ -1,1 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Journal Review</title>
+    <style>
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
+        .ok { background-color: #d4edda; }
+        .bad { background-color: #f8d7da; }
+    </style>
+</head>
+<body>
 
+<h2>Journal Review (Before Posting)</h2>
+
+<table>
+    <tr>
+        <th>Entry No</th>
+        <th>Date</th>
+        <th>Description</th>
+        <th>Currency</th>
+        <th>Total Debit</th>
+        <th>Total Credit</th>
+        <th>Status</th>
+        <th>Action</th>
+    </tr>
+
+    {% for e in entries %}
+    {% set balanced = (e.total_debit == e.total_credit) %}
+    <tr class="{{ 'ok' if balanced else 'bad' }}">
+        <td>{{ e.entry_no }}</td>
+        <td>{{ e.date }}</td>
+        <td>{{ e.description }}</td>
+        <td>{{ e.currency }}</td>
+        <td>{{ e.total_debit }}</td>
+        <td>{{ e.total_credit }}</td>
+        <td>
+            {% if balanced %}
+                Balanced
+            {% else %}
+                Not Balanced
+            {% endif %}
+        </td>
+        <td>
+            {% if balanced %}
+            <form action="/post/{{ e.entry_no }}" method="post">
+                <button type="submit">Post</button>
+            </form>
+            {% else %}
+            —
+            {% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+</body>
+</html>
