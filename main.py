@@ -1,19 +1,14 @@
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text
-from datetime import datetime, date
-import pandas as pd
-import io
+from datetime import datetime
 
-# --------------------
-# App & Templates
-# --------------------
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
 # --------------------
-# Database
+# Database (SQLite)
 # --------------------
 engine = create_engine(
     "sqlite:///database.db",
@@ -24,154 +19,160 @@ engine = create_engine(
 # Create Tables
 # --------------------
 with engine.begin() as conn:
+    # Chart of Accounts
     conn.execute(text("""
-    CREATE TABLE IF NOT EXISTS journal_entries (
+    CREATE TABLE IF NOT EXISTS accounts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        entry_no INTEGER,
-        date TEXT,
-        currency TEXT,
-        description TEXT,
-        account TEXT,
-        debit REAL,
-        credit REAL,
-        person_tag TEXT,
-        type_tag TEXT,
-        posted INTEGER DEFAULT 0,
+        code TEXT UNIQUE,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        is_postable INTEGER DEFAULT 1,
         created_at TEXT
     )
     """))
 
-    conn.execute(text("""
-    CREATE TABLE IF NOT EXISTS accounts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE
-    )
-    """))
-
+    # Persons
     conn.execute(text("""
     CREATE TABLE IF NOT EXISTS persons (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE
+        name TEXT UNIQUE NOT NULL,
+        category TEXT,
+        created_at TEXT
     )
     """))
 
+    # Currencies
     conn.execute(text("""
     CREATE TABLE IF NOT EXISTS currencies (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        code TEXT UNIQUE
+        code TEXT UNIQUE NOT NULL,
+        name TEXT
+    )
+    """))
+
+    # Journal Header
+    conn.execute(text("""
+    CREATE TABLE IF NOT EXISTS journal_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entry_no INTEGER UNIQUE,
+        entry_date TEXT,
+        description TEXT,
+        currency TEXT,
+        status TEXT DEFAULT 'DRAFT',
+        created_at TEXT
+    )
+    """))
+
+    # Journal Lines
+    conn.execute(text("""
+    CREATE TABLE IF NOT EXISTS journal_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        journal_id INTEGER,
+        account_id INTEGER,
+        debit REAL DEFAULT 0,
+        credit REAL DEFAULT 0,
+        person_id INTEGER,
+        note TEXT
     )
     """))
 
 # --------------------
-# Review Page
+# Home - List Entries
 # --------------------
 @app.get("/", response_class=HTMLResponse)
-def review(request: Request):
+def home(request: Request):
     with engine.connect() as conn:
-        rows = conn.execute(text("""
-            SELECT
-                entry_no,
-                date,
-                currency,
-                description,
-                SUM(debit) AS total_debit,
-                SUM(credit) AS total_credit
+        entries = conn.execute(text("""
+            SELECT id, entry_no, entry_date, description, currency, status
             FROM journal_entries
-            WHERE posted = 0
-            GROUP BY entry_no, date, currency, description
-            ORDER BY entry_no
+            ORDER BY entry_no DESC
         """)).mappings().all()
 
     return templates.TemplateResponse(
-        "review.html",
-        {"request": request, "entries": rows}
+        "index.html",
+        {"request": request, "entries": entries}
     )
 
 # --------------------
-# Import Excel (JOURNAL_RAW)
+# New Journal Entry
 # --------------------
-@app.post("/import-excel")
-async def import_excel(file: UploadFile = File(...)):
-    content = await file.read()
-    df = pd.read_excel(io.BytesIO(content), sheet_name="JOURNAL_RAW")
-
-    df.columns = [
-        "EntryNo",
-        "Date",
-        "Currency",
-        "Description",
-        "Account",
-        "Debit",
-        "Credit",
-        "PersonTag",
-        "TypeTag"
-    ]
-
-    df["Debit"] = df["Debit"].fillna(0)
-    df["Credit"] = df["Credit"].fillna(0)
-
+@app.post("/entry/new")
+def new_entry(
+    entry_no: int = Form(...),
+    entry_date: str = Form(...),
+    description: str = Form(...),
+    currency: str = Form(...)
+):
     with engine.begin() as conn:
-        # Clean previous data (first import)
-        conn.execute(text("DELETE FROM journal_entries"))
-        conn.execute(text("DELETE FROM accounts"))
-        conn.execute(text("DELETE FROM persons"))
-        conn.execute(text("DELETE FROM currencies"))
-
-        for _, r in df.iterrows():
-            entry_no = int(r["EntryNo"])
-
-            d = r["Date"]
-            if pd.isna(d):
-                d = date.today().isoformat()
-            else:
-                d = pd.to_datetime(d).date().isoformat()
-
-            conn.execute(text("""
-                INSERT OR IGNORE INTO accounts(name) VALUES (:a)
-            """), {"a": r["Account"]})
-
-            conn.execute(text("""
-                INSERT OR IGNORE INTO persons(name) VALUES (:p)
-            """), {"p": r["PersonTag"]})
-
-            conn.execute(text("""
-                INSERT OR IGNORE INTO currencies(code) VALUES (:c)
-            """), {"c": r["Currency"]})
-
-            conn.execute(text("""
-                INSERT INTO journal_entries
-                (entry_no, date, currency, description,
-                 account, debit, credit, person_tag, type_tag,
-                 posted, created_at)
-                VALUES
-                (:e, :d, :c, :desc,
-                 :a, :de, :cr, :p, :t,
-                 0, :now)
-            """), {
-                "e": entry_no,
-                "d": d,
-                "c": r["Currency"],
-                "desc": r["Description"],
-                "a": r["Account"],
-                "de": float(r["Debit"]),
-                "cr": float(r["Credit"]),
-                "p": r["PersonTag"],
-                "t": r["TypeTag"],
-                "now": datetime.now().isoformat()
-            })
+        conn.execute(text("""
+            INSERT INTO journal_entries
+            (entry_no, entry_date, description, currency, status, created_at)
+            VALUES (:n, :d, :desc, :c, 'DRAFT', :t)
+        """), {
+            "n": entry_no,
+            "d": entry_date,
+            "desc": description,
+            "c": currency,
+            "t": datetime.now().isoformat()
+        })
 
     return RedirectResponse("/", status_code=303)
 
 # --------------------
-# Post Entry
+# Add Line to Entry
 # --------------------
-@app.post("/post/{entry_no}")
-def post_entry(entry_no: int):
+@app.post("/entry/{entry_id}/line")
+def add_line(
+    entry_id: int,
+    account_id: int = Form(...),
+    debit: float = Form(0),
+    credit: float = Form(0),
+    person_id: int = Form(None),
+    note: str = Form("")
+):
     with engine.begin() as conn:
+        status = conn.execute(
+            text("SELECT status FROM journal_entries WHERE id=:i"),
+            {"i": entry_id}
+        ).scalar()
+
+        if status != "DRAFT":
+            return {"error": "Entry already posted"}
+
+        conn.execute(text("""
+            INSERT INTO journal_lines
+            (journal_id, account_id, debit, credit, person_id, note)
+            VALUES (:j, :a, :d, :c, :p, :n)
+        """), {
+            "j": entry_id,
+            "a": account_id,
+            "d": debit,
+            "c": credit,
+            "p": person_id,
+            "n": note
+        })
+
+    return RedirectResponse("/", status_code=303)
+
+# --------------------
+# Post Journal Entry
+# --------------------
+@app.post("/entry/{entry_id}/post")
+def post_entry(entry_id: int):
+    with engine.begin() as conn:
+        totals = conn.execute(text("""
+            SELECT SUM(debit), SUM(credit)
+            FROM journal_lines
+            WHERE journal_id=:j
+        """), {"j": entry_id}).fetchone()
+
+        if totals[0] != totals[1]:
+            return {"error": "Debit and Credit not balanced"}
+
         conn.execute(text("""
             UPDATE journal_entries
-            SET posted = 1
-            WHERE entry_no = :e
-        """), {"e": entry_no})
+            SET status='POSTED'
+            WHERE id=:j
+        """), {"j": entry_id})
 
     return RedirectResponse("/", status_code=303)
