@@ -176,3 +176,42 @@ def post_entry(entry_id: int):
         """), {"j": entry_id})
 
     return RedirectResponse("/", status_code=303)
+    # --------------------
+# Chart of Accounts
+# --------------------
+@app.get("/accounts", response_class=HTMLResponse)
+def list_accounts(request: Request):
+    with engine.connect() as conn:
+        accounts = conn.execute(text("""
+            SELECT id, code, name, type, is_postable
+            FROM accounts
+            ORDER BY code
+        """)).mappings().all()
+
+    return templates.TemplateResponse(
+        "accounts.html",
+        {"request": request, "accounts": accounts}
+    )
+
+
+@app.post("/accounts/new")
+def add_account(
+    code: str = Form(...),
+    name: str = Form(...),
+    type: str = Form(...),
+    is_postable: int = Form(1)
+):
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO accounts
+            (code, name, type, is_postable, created_at)
+            VALUES (:c, :n, :t, :p, :d)
+        """), {
+            "c": code,
+            "n": name,
+            "t": type,
+            "p": is_postable,
+            "d": datetime.now().isoformat()
+        })
+
+    return RedirectResponse("/accounts", status_code=303)
