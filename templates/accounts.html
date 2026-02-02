@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Chart of Accounts</title>
+    <style>
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
+        th { background: #f0f0f0; }
+    </style>
+</head>
+<body>
+
+<h2>Chart of Accounts</h2>
+
+<form method="post" action="/accounts/new">
+    <label>Account Code:</label>
+    <input type="text" name="code" required>
+
+    <label>Account Name:</label>
+    <input type="text" name="name" required>
+
+    <label>Type:</label>
+    <select name="type">
+        <option value="asset">Asset</option>
+        <option value="liability">Liability</option>
+        <option value="equity">Equity</option>
+        <option value="revenue">Revenue</option>
+        <option value="expense">Expense</option>
+    </select>
+
+    <label>Postable:</label>
+    <select name="is_postable">
+        <option value="1">Yes</option>
+        <option value="0">No</option>
+    </select>
+
+    <button type="submit">Add Account</button>
+</form>
+
+<table>
+    <tr>
+        <th>Code</th>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Postable</th>
+    </tr>
+
+    {% for a in accounts %}
+    <tr>
+        <td>{{ a.code }}</td>
+        <td>{{ a.name }}</td>
+        <td>{{ a.type }}</td>
+        <td>{{ "Yes" if a.is_postable else "No" }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<br>
+<a href="/">⬅ Back to Journal</a>
+
+</body>
+</html>
